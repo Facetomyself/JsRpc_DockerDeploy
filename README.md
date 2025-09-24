@@ -66,6 +66,112 @@
 
 运行服务器程序和js脚本 即可让它们通信，实现调用接口执行js获取想要的值(加解密)
 
+## Docker 一体化运行（含浏览器环境）
+
+为便于在无浏览器的环境中直接运行，本仓库新增了 Playwright 浏览器环境适配与镜像构建：
+
+- 基于 Playwright 官方运行时镜像，内置 Chromium/Firefox/WebKit
+- 通过 `features/browser/infrastructure/play_client.js` 启动无头浏览器，自动注入 `resouces/JsEnv_Dev.js` 并连接回本服务 `/ws`
+- 单一入口 `main.sh` 负责编排：先启动 Go 服务，再启动无头浏览器适配器
+
+构建镜像：
+
+```bash
+docker build -t jsrpc:play .
+```
+
+运行镜像：
+
+```bash
+docker run --rm -p 12080:12080 \
+  -e BROWSER=chromium \
+  -e HEADLESS=true \
+  -e TARGET_URL=https://example.com \
+  -e JRPC_GROUP=default \
+  --name jsrpc jsrpc:play
+```
+
+关键环境变量：
+
+- `BROWSER`：`chromium|firefox|webkit`，默认 `chromium`
+- `HEADLESS`：`true|false`，默认 `true`
+- `TARGET_URL`：要打开的页面，默认 `about:blank`
+- `JRPC_GROUP`：连接 `/ws` 使用的分组名，默认 `default`
+- `JRPC_WS_URL`：可直接指定完整的 ws/wss 地址（若设置则覆盖以上 Host/Port/Group）
+- `HOST`/`PORT`：当未显式指定 `JRPC_WS_URL` 时，组合 `ws://HOST:PORT/ws?group=...`（默认 `127.0.0.1:12080`）
+
+容器启动后：
+
+- Go 服务监听 `0.0.0.0:12080`
+- 无头浏览器在 `TARGET_URL` 打开页面并注入 `Hlclient`，自动连接 `ws://127.0.0.1:12080/ws?group=...`
+- 这时可直接调用 `/execjs`、`/go`、`/page/html` 等接口进行远程执行
+
+### 一键启用 wss://（容器内自动 TLS 生成）
+
+如果希望开启 TLS 并通过 wss 访问，可启用内置的自签名证书生成：
+
+```bash
+docker run --rm -p 12080:12080 -p 12443:12443 \
+  -e TLS_ENABLE=true \
+  -e TLS_HOST=localhost \
+  -e TLS_PORT=12443 \
+  -e TARGET_URL=https://example.com \
+  --name jsrpc-wss jsrpc:play
+```
+
+- 容器启动时将自动生成证书至 `/app/certs/jsrpc.pem`、`/app/certs/jsrpc.key`
+- 运行时配置写入 `/app/runtime-config.yaml` 并开启 `HttpsServices`
+- HTTP 服务仍在 `:12080` 监听，HTTPS 在 `:12443`
+
+浏览器侧若要让容器内 Playwright 适配器使用 `wss://` 与服务端通讯（而不是默认的 `ws://`）：
+
+```bash
+docker run --rm -p 12080:12080 -p 12443:12443 \
+  -e TLS_ENABLE=true \
+  -e TLS_HOST=localhost \
+  -e TLS_PORT=12443 \
+  -e JRPC_CLIENT_PROTO=wss \
+  --name jsrpc-wss jsrpc:play
+```
+
+注意：容器内自动生成的是自签名证书，真实浏览器直连 `wss://` 时可能因证书不受信导致失败。生产可将已签发证书挂载进容器并指定：
+
+```bash
+docker run --rm -p 12080:12080 -p 12443:12443 \
+  -e TLS_ENABLE=true \
+  -e TLS_HOST=your.domain.com \
+  -e TLS_PORT=12443 \
+  -e TLS_CERT_PATH=/app/certs/fullchain.pem \
+  -e TLS_KEY_PATH=/app/certs/privkey.key \
+  -v /path/to/your/fullchain.pem:/app/certs/fullchain.pem:ro \
+  -v /path/to/your/privkey.key:/app/certs/privkey.key:ro \
+  --name jsrpc-wss jsrpc:play
+```
+
+## 生产化 Nginx 反代（TLS 终止）与一键 compose
+
+已在 `Deployments/nginx/` 提供生产可用的 Nginx 配置与一键编排：
+
+1) 准备证书
+- 将已签发证书存放到 `Deployments/nginx/certs/`，命名为：
+  - `fullchain.pem`
+  - `privkey.key`
+
+2) 启动
+
+```bash
+cd Deployments/nginx
+docker compose up -d --build
+```
+
+- 外部访问 `https://<域名或IP>/`；WebSocket 使用 `wss://<域名或IP>/ws`
+- Nginx 将流量转发到 `app:12080`，并处理 `/ws` 的 WebSocket 升级
+
+3) 可调参数
+- 编辑 `Deployments/nginx/docker-compose.yml` 中 `app.environment`：
+  - `BROWSER`、`HEADLESS`、`TARGET_URL`、`JRPC_GROUP`
+- 如需调整 Nginx 端口、证书文件名或更多站点配置，修改 `nginx.conf` 与 `conf.d/jrpc.conf`
+
 ## 实现
 
 原理：在网站的控制台新建一个WebScoket客户端链接到服务器通信，调用服务器的接口 服务器会发送信息给客户端 客户端接收到要执行的方法执行完js代码后把获得想要的内容发回给服务器 服务器接收到后再显示出来

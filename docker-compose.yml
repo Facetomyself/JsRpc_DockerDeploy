@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  jsrpc:
+    image: jsrpc:play
+    container_name: jsrpc
+    ports:
+      - "30003:12080"  # HTTP服务端口
+      - "12443:12443"  # HTTPS服务端口（当TLS启用时）
+    environment:
+      # 浏览器配置
+      - BROWSER=chromium
+      - HEADLESS=true
+      - TARGET_URL=https://example.com
+
+      # WebSocket配置
+      - JRPC_GROUP=default
+      - HOST=127.0.0.1
+      - PORT=12080
+
+      # TLS配置（可选）
+      - TLS_ENABLE=false
+      - TLS_HOST=localhost
+      - TLS_PORT=12443
+      - JRPC_CLIENT_PROTO=ws
+
+    volumes: []
+      # 如果需要挂载TLS证书，可以取消注释下面行：
+      # - ./certs:/app/certs:ro
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:12080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    networks:
+      - jsrpc-network
+
+networks:
+  jsrpc-network:
+    driver: bridge
+
+# 使用说明：
+# 1. 构建并启动服务：docker-compose up -d --build
+# 2. 查看服务状态：docker-compose ps
+# 3. 查看日志：docker-compose logs -f jsrpc
+# 4. 停止服务：docker-compose down
+#
+# 访问地址：
+# - HTTP: http://localhost:30003
+# - WebSocket: ws://localhost:30003/ws?group=default
+#
+# 启用TLS（可选）：
+# 1. 将 environment 中的 TLS_ENABLE 改为 true
+# 2. 准备证书文件到 ./certs/ 目录
+# 3. 取消 volumes 的注释
+# 4. 重新启动：docker-compose up -d

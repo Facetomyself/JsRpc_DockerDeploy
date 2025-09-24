@@ -2,6 +2,7 @@ BasicListen: "0.0.0.0:12080" # 不想暴露公网/局域网可改成127.0.0.1:po
 HttpsServices:
   IsEnable: false # 是否启用https/wss服务
   HttpsListen: "0.0.0.0:12443"
+  HttpsHost: "localhost:12443" # 可选：用于重定向显示的host:port；为空时回退为HttpsListen
   PemPath: "hl98.cn.pem"
   KeyPath: "hl98.cn.key"
 

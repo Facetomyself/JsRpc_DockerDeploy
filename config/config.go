@@ -73,10 +73,11 @@ type ConfStruct struct {
 
 // HttpsConfig 代表HTTPS相关配置的结构体
 type HttpsConfig struct {
-	IsEnable    bool   `yaml:"IsEnable"`
-	HttpsListen string `yaml:"HttpsListen"`
-	PemPath     string `yaml:"PemPath"`
-	KeyPath     string `yaml:"KeyPath"`
+    IsEnable    bool   `yaml:"IsEnable"`
+    HttpsListen string `yaml:"HttpsListen"`
+    PemPath     string `yaml:"PemPath"`
+    KeyPath     string `yaml:"KeyPath"`
+    HttpsHost   string `yaml:"HttpsHost"`
 }
 
 type RouterReplace struct {

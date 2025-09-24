@@ -330,21 +330,26 @@ func InitAPI(conf config.ConfStruct) {
 	sb.WriteString(" ssl启用状态：")
 	sb.WriteString(strconv.FormatBool(conf.HttpsServices.IsEnable))
 
-	if conf.HttpsServices.IsEnable {
-		sb.WriteString(" https监听地址：")
-		sb.WriteString(conf.HttpsServices.HttpsListen)
-		router.Use(tlsHandler(conf.HttpsServices.HttpsListen))
-		go func() {
-			err := router.RunTLS(
-				conf.HttpsServices.HttpsListen,
-				conf.HttpsServices.PemPath,
-				conf.HttpsServices.KeyPath,
-			)
-			if err != nil {
-				log.Error(err)
-			}
-		}()
-	}
+    if conf.HttpsServices.IsEnable {
+        sb.WriteString(" https监听地址：")
+        sb.WriteString(conf.HttpsServices.HttpsListen)
+        // Use HttpsHost for redirect host if provided, otherwise fall back to listen address
+        hostForRedirect := conf.HttpsServices.HttpsHost
+        if hostForRedirect == "" {
+            hostForRedirect = conf.HttpsServices.HttpsListen
+        }
+        router.Use(tlsHandler(hostForRedirect))
+        go func() {
+            err := router.RunTLS(
+                conf.HttpsServices.HttpsListen,
+                conf.HttpsServices.PemPath,
+                conf.HttpsServices.KeyPath,
+            )
+            if err != nil {
+                log.Error(err)
+            }
+        }()
+    }
 	log.Infoln(sb.String())
 
 	err := router.Run(conf.BasicListen)
